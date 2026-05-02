@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+
+  <!-- Makes the website responsive on phones -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Smart Traffic Light System Pins Explanation</title>
+
+</head>
+
+<body>
+
+  <!-- Website header -->
+  <header>
+    <h1>Smart Traffic Light System</h1>
+    <p>Arduino, IR Sensor, OLED, RFID, Push Button, and Pin Explanation</p>
+  </header>
+
+  <main class="container">
+<!-- ================= CODE SECTION ================= -->
+<section class="card">
+  <span class="tag">Arduino Code</span>
+  <h2>Full Arduino Code</h2>
+
+  <p>
+    The following code controls the entire smart traffic light system including
+    LEDs, IR sensor, OLED displays, RFID module, and push button.
+  </p>
+
+
+
+
+
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #0d1117;
+    color: #c9d1d9;
+    font-family: Consolas, "Courier New", monospace;
+    padding: 24px;
+  }
+  h1 {
+    font-family: Arial, sans-serif;
+    font-size: 24px;
+    color: #f0f6fc;
+    margin: 0 0 16px;
+  }
+  .code-box {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 14px;
+    padding: 20px;
+    overflow: auto;
+    box-shadow: 0 12px 35px rgba(0,0,0,.35);
+  }
+  pre {
+    margin: 0;
+    white-space: pre;
+    line-height: 1.65;
+    font-size: 14px;
+  }
+  .com { color: #8b949e; font-style: italic; }
+  .kw { color: #ff7b72; font-weight: 600; }
+  .type { color: #79c0ff; }
+  .fn { color: #d2a8ff; }
+  .num { color: #a5d6ff; }
+  .str { color: #a5d6ff; }
+  .pre { color: #ffa657; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>Full Colored Arduino Code</h1>
+<div class="code-box"><pre><code><span class="pre">#include</span> &lt;Wire.h&gt;                  <span class="com">// Used for I2C communication. The OLED screens use I2C.</span>
+<span class="pre">#include</span> <span class="str">&quot;SSD1306Ascii.h&quot;</span>          <span class="com">// Library used to print text on SSD1306 OLED displays.</span>
+<span class="pre">#include</span> <span class="str">&quot;<span class="type">SSD1306AsciiWire</span>.h&quot;</span>      <span class="com">// Allows the SSD1306 OLED to work using the Wire I2C library.</span>
+<span class="pre">#include</span> &lt;SPI.h&gt;                   <span class="com">// Used for SPI communication. The RFID module uses SPI.</span>
+<span class="pre">#include</span> &lt;<span class="type">MFRC522</span>.h&gt;               <span class="com">// Library used to control the RFID RC522 module.</span>
+
+
+<span class="com">// ---------------- 1. DISPLAY SETUP ----------------</span>
+
+<span class="com">// This creates an object for the first OLED screen.</span>
+<span class="com">// This OLED is used to show car traffic information.</span>
+<span class="type">SSD1306AsciiWire</span> displayCars;
+
+<span class="com">// This creates an object for the second OLED screen.</span>
+<span class="com">// This OLED is used to show pedestrian information.</span>
+<span class="type">SSD1306AsciiWire</span> displayPed;
+
+
+<span class="com">// ---------------- 2. PIN DEFINITIONS ----------------</span>
+
+<span class="com">// The pedestrian push button is connected to Arduino digital pin 2.</span>
+<span class="com">// We use this button when a pedestrian wants to cross.</span>
+<span class="kw">const</span> <span class="kw">int</span> BUTTON_PIN = <span class="num">2</span>;
+
+<span class="com">// The red LED is connected to Arduino digital pin 3.</span>
+<span class="com">// Red means cars must stop.</span>
+<span class="kw">const</span> <span class="kw">int</span> RED_LED = <span class="num">3</span>;
+
+<span class="com">// The yellow LED is connected to Arduino digital pin 4.</span>
+<span class="com">// Yellow means caution / prepare to stop or go.</span>
+<span class="kw">const</span> <span class="kw">int</span> YELLOW_LED = <span class="num">4</span>;
+
+<span class="com">// The green LED is connected to Arduino digital pin 6.</span>
+<span class="com">// Green means cars can move.</span>
+<span class="kw">const</span> <span class="kw">int</span> GREEN_LED = <span class="num">6</span>;
+
+<span class="com">// The IR sensor is connected to Arduino digital pin 5.</span>
+<span class="com">// It detects cars passing in front of it.</span>
+<span class="kw">const</span> <span class="kw">int</span> IR_SENSOR = <span class="num">5</span>;
+
+<span class="com">// The buzzer is connected to Arduino digital pin 7.</span>
+<span class="com">// It turns on when a car violates the red light.</span>
+<span class="kw">const</span> <span class="kw">int</span> BUZZER_PIN = <span class="num">7</span>;
+
+<span class="com">// RFID reset pin.</span>
+<span class="com">// This pin is used by the RFID module to reset communication.</span>
+<span class="pre">#define</span> RST_PIN <span class="num">9</span>
+
+<span class="com">// RFID slave select pin.</span>
+<span class="com">// This pin is used to choose the RFID module during SPI communication.</span>
+<span class="pre">#define</span> SS_PIN <span class="num">10</span>
+
+<span class="com">// This creates an RFID object called rfid.</span>
+<span class="com">// The object uses SS_PIN and RST_PIN to communicate with the RFID module.</span>
+<span class="type">MFRC522</span> <span class="fn">rfid</span>(SS_PIN, RST_PIN);
+
+
+<span class="com">// ---------------- 3. STATE VARIABLES ----------------</span>
+
+<span class="com">// This variable counts how many vehicles passed in front of the IR sensor.</span>
+<span class="com">// int is used because the value is a whole number.</span>
+<span class="kw">int</span> vehicleCount = <span class="num">0</span>;
+
+<span class="com">// This variable checks if a car is currently in front of the IR sensor.</span>
+<span class="com">// bool means true or false only.</span>
+<span class="com">// false = no car currently detected.</span>
+<span class="com">// true = car currently detected.</span>
+<span class="kw">bool</span> isCarPresent = <span class="kw">false</span>;
+
+<span class="com">// This variable stores if the pedestrian button was pressed.</span>
+<span class="com">// false = no request.</span>
+<span class="com">// true = pedestrian wants to cross.</span>
+<span class="kw">bool</span> pedestrianRequest = <span class="kw">false</span>;
+
+<span class="com">// This variable stores the time when the buzzer should turn off.</span>
+<span class="com">// unsigned long is used because millis() returns a very large positive number.</span>
+<span class="com">// millis() counts time in milliseconds since Arduino started.</span>
+<span class="com">// int is too small for this, so unsigned long is safer.</span>
+<span class="kw">unsigned</span> <span class="kw">long</span> buzzerTurnOffTime = <span class="num">0</span>; 
+
+
+<span class="com">// This enum stores the current traffic light state.</span>
+<span class="com">// enum makes the code easier to read instead of using numbers like 0, 1, 2.</span>
+<span class="kw">enum</span> <span class="type">LightState</span> { GREEN, YELLOW, RED };
+
+<span class="com">// This variable stores the current light color.</span>
+<span class="com">// The system starts with green.</span>
+<span class="type">LightState</span> currentState = GREEN;
+
+
+<span class="com">// This enum stores the phase of the full traffic cycle.</span>
+<span class="com">// P_GREEN    = green phase.</span>
+<span class="com">// P_YELLOW_1 = yellow after green.</span>
+<span class="com">// P_RED      = red phase.</span>
+<span class="com">// P_YELLOW_2 = yellow after red.</span>
+<span class="kw">enum</span> <span class="type">CyclePhase</span> { P_GREEN, P_YELLOW_1, P_RED, P_YELLOW_2 };
+
+<span class="com">// This variable stores which phase the system is currently running.</span>
+<span class="com">// The system starts with the green phase.</span>
+<span class="type">CyclePhase</span> currentPhase = P_GREEN;
+
+
+<span class="com">// This stores the text that will appear on the car OLED.</span>
+<span class="com">// const char* is used for text.</span>
+<span class="com">// It is lighter than String and better for Arduino memory.</span>
+<span class="kw">const</span> char* currentCarText = <span class="str">&quot;&quot;</span>;
+
+<span class="com">// This stores the countdown number for the car OLED.</span>
+<span class="kw">int</span> currentCarSec = <span class="num">0</span>;
+
+<span class="com">// This stores the text that will appear on the pedestrian OLED.</span>
+<span class="kw">const</span> char* currentPedText = <span class="str">&quot;&quot;</span>;
+
+<span class="com">// This stores the countdown number for the pedestrian OLED.</span>
+<span class="kw">int</span> currentPedSec = <span class="num">0</span>;
+
+
+<span class="com">// ---------------- SETUP FUNCTION ----------------</span>
+
+<span class="kw">void</span> <span class="fn">setup</span>() {
+
+    <span class="com">// Start Serial Monitor communication at speed 9600.</span>
+    <span class="com">// This lets us print messages to the computer for testing.</span>
+    Serial.<span class="fn">begin</span>(<span class="num">9600</span>);
+
+    <span class="com">// Print a starting message on the Serial Monitor.</span>
+    Serial.<span class="fn">println</span>(<span class="str">&quot;System Starting...&quot;</span>);
+
+    <span class="com">// Set the red LED pin as OUTPUT because Arduino sends electricity to the LED.</span>
+    <span class="fn">pinMode</span>(RED_LED, OUTPUT);
+
+    <span class="com">// Set the yellow LED pin as OUTPUT.</span>
+    <span class="fn">pinMode</span>(YELLOW_LED, OUTPUT);
+
+    <span class="com">// Set the green LED pin as OUTPUT.</span>
+    <span class="fn">pinMode</span>(GREEN_LED, OUTPUT);
+
+    <span class="com">// Set the button pin as INPUT_PULLUP.</span>
+    <span class="com">// INPUT_PULLUP means Arduino uses an internal resistor.</span>
+    <span class="com">// The button reads HIGH normally.</span>
+    <span class="com">// When the button is pressed, it reads LOW.</span>
+    <span class="fn">pinMode</span>(BUTTON_PIN, INPUT_PULLUP);
+
+    <span class="com">// Set the IR sensor pin as INPUT because Arduino reads data from the sensor.</span>
+    <span class="fn">pinMode</span>(IR_SENSOR, INPUT);
+
+    <span class="com">// Set the buzzer pin as OUTPUT because Arduino controls the buzzer.</span>
+    <span class="fn">pinMode</span>(BUZZER_PIN, OUTPUT);
+
+    <span class="com">// Make sure the buzzer is OFF at the beginning.</span>
+    <span class="fn">digitalWrite</span>(BUZZER_PIN, LOW);
+
+    <span class="com">// Start SPI communication for the RFID module.</span>
+    SPI.<span class="fn">begin</span>();
+
+    <span class="com">// Start and initialize the RFID reader.</span>
+    rfid.<span class="fn">PCD_Init</span>();
+
+    <span class="com">// Start I2C communication for the OLED screens.</span>
+    Wire.<span class="fn">begin</span>();
+
+    <span class="com">// Set I2C speed to 400000 Hz.</span>
+    <span class="com">// This makes OLED communication faster.</span>
+    Wire.<span class="fn">setClock</span>(<span class="num">400000L</span>);
+
+    <span class="com">// Start the first OLED display.</span>
+    <span class="com">// 0x3C is the I2C address of the car OLED.</span>
+    displayCars.<span class="fn">begin</span>(&amp;Adafruit128x64, <span class="num">0x3C</span>);
+
+    <span class="com">// Set the font used on the car OLED.</span>
+    displayCars.<span class="fn">setFont</span>(Adafruit5x7);
+
+    <span class="com">// Clear anything written on the car OLED.</span>
+    displayCars.<span class="fn">clear</span>();
+
+    <span class="com">// Start the second OLED display.</span>
+    <span class="com">// 0x3D is the I2C address of the pedestrian OLED.</span>
+    displayPed.<span class="fn">begin</span>(&amp;Adafruit128x64, <span class="num">0x3D</span>);
+
+    <span class="com">// Set the font used on the pedestrian OLED.</span>
+    displayPed.<span class="fn">setFont</span>(Adafruit5x7);
+
+    <span class="com">// Clear anything written on the pedestrian OLED.</span>
+    displayPed.<span class="fn">clear</span>();
+
+    <span class="com">// Print ready message on Serial Monitor.</span>
+    Serial.<span class="fn">println</span>(<span class="str">&quot;System Ready!&quot;</span>);
+}
+
+
+<span class="com">// ---------------- MAIN LOOP ----------------</span>
+
+<span class="kw">void</span> <span class="fn">loop</span>() {
+
+    <span class="com">// This variable becomes true if RFID emergency card is detected.</span>
+    <span class="com">// It starts as false every loop.</span>
+    <span class="kw">bool</span> emergencyTriggered = <span class="kw">false</span>;
+
+    <span class="com">// If the current phase is green, run the green phase.</span>
+    <span class="kw">if</span> (currentPhase == P_GREEN) {
+
+        <span class="com">// Run green phase.</span>
+        <span class="com">// If RFID is detected during it, this function returns true.</span>
+        emergencyTriggered = <span class="fn">runGreenPhase</span>();
+
+        <span class="com">// After green ends, go to first yellow phase.</span>
+        currentPhase = P_YELLOW_1;
+    }
+
+    <span class="com">// If the current phase is first yellow.</span>
+    <span class="kw">else</span> <span class="kw">if</span> (currentPhase == P_YELLOW_1) {
+
+        <span class="com">// Run yellow phase.</span>
+        emergencyTriggered = <span class="fn">runYellowPhase</span>();
+
+        <span class="com">// After yellow ends, go to red phase.</span>
+        currentPhase = P_RED;
+    }
+
+    <span class="com">// If the current phase is red.</span>
+    <span class="kw">else</span> <span class="kw">if</span> (currentPhase == P_RED) {
+
+        <span class="com">// Run red phase.</span>
+        emergencyTriggered = <span class="fn">runRedPhase</span>();
+
+        <span class="com">// After red ends, go to second yellow phase.</span>
+        currentPhase = P_YELLOW_2;
+    }
+
+    <span class="com">// If the current phase is second yellow.</span>
+    <span class="kw">else</span> <span class="kw">if</span> (currentPhase == P_YELLOW_2) {
+
+        <span class="com">// Run yellow phase again.</span>
+        emergencyTriggered = <span class="fn">runYellowPhase</span>();
+
+        <span class="com">// After yellow ends, return to green phase.</span>
+        currentPhase = P_GREEN;
+    }
+
+    <span class="com">// If emergency RFID was detected in any phase.</span>
+    <span class="kw">if</span> (emergencyTriggered) {
+
+        <span class="com">// Run emergency override mode.</span>
+        <span class="fn">handleEmergency</span>();
+
+        <span class="com">// After emergency finishes, continue from red phase.</span>
+        currentPhase = P_RED;
+    }
+}
+
+
+<span class="com">// ==================== TRAFFIC PHASES ====================</span>
+
+
+<span class="com">// ---------------- GREEN PHASE ----------------</span>
+
+<span class="kw">bool</span> <span class="fn">runGreenPhase</span>() {
+
+    <span class="com">// Save the current traffic light state as GREEN.</span>
+    currentState = GREEN;
+
+    <span class="com">// Turn green LED ON.</span>
+    <span class="fn">digitalWrite</span>(GREEN_LED, HIGH);
+
+    <span class="com">// Turn yellow LED OFF.</span>
+    <span class="fn">digitalWrite</span>(YELLOW_LED, LOW);
+
+    <span class="com">// Turn red LED OFF.</span>
+    <span class="fn">digitalWrite</span>(RED_LED, LOW);
+
+    <span class="com">// At the start of green, reset pedestrian request.</span>
+    <span class="com">// This means no pedestrian request exists yet.</span>
+    pedestrianRequest = <span class="kw">false</span>;
+
+    <span class="com">// Countdown from 30 seconds to 1 second.</span>
+    <span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">30</span>; i &gt; <span class="num">0</span>; i--) {
+
+        <span class="com">// Text shown on car OLED.</span>
+        currentCarText = <span class="str">&quot;GO&quot;</span>;
+
+        <span class="com">// Countdown shown on car OLED.</span>
+        currentCarSec = i;
+
+        <span class="com">// Text shown on pedestrian OLED.</span>
+        <span class="com">// Pedestrians must wait while cars are moving.</span>
+        currentPedText = <span class="str">&quot;WAIT&quot;</span>;
+
+        <span class="com">// No countdown is shown for pedestrians during green.</span>
+        currentPedSec = <span class="num">0</span>;
+
+        <span class="com">// Update both OLED screens with the new text and time.</span>
+        <span class="fn">updateUI</span>();
+
+        <span class="com">// Wait 1 second, but during this second keep checking:</span>
+        <span class="com">// - IR sensor</span>
+        <span class="com">// - buzzer timer</span>
+        <span class="com">// - pedestrian button</span>
+        <span class="com">// - RFID emergency card</span>
+        <span class="com">//</span>
+        <span class="com">// 1000 = 1000 milliseconds = 1 second</span>
+        <span class="com">// true = check button</span>
+        <span class="com">// true = check RFID</span>
+        <span class="com">//</span>
+        <span class="com">// If emergency RFID is detected, the function returns true.</span>
+        <span class="kw">if</span> (<span class="fn">waitAndCheckSensors</span>(<span class="num">1000</span>, <span class="kw">true</span>, <span class="kw">true</span>)) <span class="kw">return</span> <span class="kw">true</span>;
+
+        <span class="com">// If pedestrian button was pressed during green.</span>
+        <span class="kw">if</span> (pedestrianRequest) {
+
+            <span class="com">// Print message to Serial Monitor.</span>
+            Serial.<span class="fn">println</span>(<span class="str">&quot;&gt;&gt;&gt; Pedestrian Button Pressed! Stopping traffic...&quot;</span>);
+
+            <span class="com">// Stop green countdown early so system can move to yellow then red.</span>
+            break;
+        }
+    }
+
+    <span class="com">// Turn green LED OFF when green phase finishes.</span>
+    <span class="fn">digitalWrite</span>(GREEN_LED, LOW);
+
+    <span class="com">// Return false because no emergency happened.</span>
+    <span class="kw">return</span> <span class="kw">false</span>;
+}
+
+
+<span class="com">// ---------------- YELLOW PHASE ----------------</span>
+
+<span class="kw">bool</span> <span class="fn">runYellowPhase</span>() {
+
+    <span class="com">// Save current light state as YELLOW.</span>
+    currentState = YELLOW;
+
+    <span class="com">// Turn yellow LED ON.</span>
+    <span class="fn">digitalWrite</span>(YELLOW_LED, HIGH);
+
+    <span class="com">// Countdown from 3 seconds to 1 second.</span>
+    <span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">3</span>; i &gt; <span class="num">0</span>; i--) {
+
+        <span class="com">// Show caution message to cars.</span>
+        currentCarText = <span class="str">&quot;CAUTION&quot;</span>;
+
+        <span class="com">// Show remaining yellow time.</span>
+        currentCarSec = i;
+
+        <span class="com">// Pedestrians still wait during yellow.</span>
+        currentPedText = <span class="str">&quot;WAIT&quot;</span>;
+
+        <span class="com">// No pedestrian countdown during yellow.</span>
+        currentPedSec = <span class="num">0</span>;
+
+        <span class="com">// Update OLED screens.</span>
+        <span class="fn">updateUI</span>();
+
+        <span class="com">// Wait 1 second and check sensors.</span>
+        <span class="com">// false = do not check pedestrian button during yellow.</span>
+        <span class="com">// true = check RFID emergency card.</span>
+        <span class="kw">if</span> (<span class="fn">waitAndCheckSensors</span>(<span class="num">1000</span>, <span class="kw">false</span>, <span class="kw">true</span>)) <span class="kw">return</span> <span class="kw">true</span>;
+    }
+
+    <span class="com">// Turn yellow LED OFF after yellow phase finishes.</span>
+    <span class="fn">digitalWrite</span>(YELLOW_LED, LOW);
+
+    <span class="com">// Return false because no emergency happened.</span>
+    <span class="kw">return</span> <span class="kw">false</span>;
+}
+
+
+<span class="com">// ---------------- RED PHASE ----------------</span>
+
+<span class="kw">bool</span> <span class="fn">runRedPhase</span>() {
+
+    <span class="com">// Save current light state as RED.</span>
+    currentState = RED;
+
+    <span class="com">// Turn red LED ON.</span>
+    <span class="fn">digitalWrite</span>(RED_LED, HIGH);
+
+    <span class="com">// Countdown from 30 seconds to 1 second.</span>
+    <span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">30</span>; i &gt; <span class="num">0</span>; i--) {
+
+        <span class="com">// Tell cars to stop.</span>
+        currentCarText = <span class="str">&quot;STOP&quot;</span>;
+
+        <span class="com">// Show remaining red time for cars.</span>
+        currentCarSec = i;
+
+        <span class="com">// Tell pedestrians they can cross.</span>
+        currentPedText = <span class="str">&quot;CROSS&quot;</span>;
+
+        <span class="com">// Show pedestrian countdown.</span>
+        currentPedSec = i;
+
+        <span class="com">// Update OLED screens.</span>
+        <span class="fn">updateUI</span>();
+
+        <span class="com">// Wait 1 second and keep checking:</span>
+        <span class="com">// - IR sensor</span>
+        <span class="com">// - buzzer</span>
+        <span class="com">// - RFID emergency</span>
+        <span class="com">//</span>
+        <span class="com">// false = no pedestrian button check during red.</span>
+        <span class="com">// true = check RFID.</span>
+        <span class="kw">if</span> (<span class="fn">waitAndCheckSensors</span>(<span class="num">1000</span>, <span class="kw">false</span>, <span class="kw">true</span>)) <span class="kw">return</span> <span class="kw">true</span>;
+    }
+
+    <span class="com">// Turn red LED OFF when red phase ends.</span>
+    <span class="fn">digitalWrite</span>(RED_LED, LOW);
+
+    <span class="com">// Return false because no emergency happened.</span>
+    <span class="kw">return</span> <span class="kw">false</span>;
+}
+
+
+<span class="com">// ---------------- EMERGENCY MODE ----------------</span>
+
+<span class="kw">void</span> <span class="fn">handleEmergency</span>() {
+
+    <span class="com">// Print emergency message on Serial Monitor.</span>
+    Serial.<span class="fn">println</span>(<span class="str">&quot;&gt;&gt;&gt; EMERGENCY OVERRIDE TRIGGERED &lt;&lt;&lt;&quot;</span>);
+
+    <span class="com">// If emergency happens while the light is red.</span>
+    <span class="kw">if</span> (currentState == RED) {
+
+        <span class="com">// Turn red LED OFF.</span>
+        <span class="fn">digitalWrite</span>(RED_LED, LOW);
+
+        <span class="com">// Turn yellow LED ON before switching to emergency green.</span>
+        <span class="fn">digitalWrite</span>(YELLOW_LED, HIGH);
+
+        <span class="com">// Update current state to yellow.</span>
+        currentState = YELLOW;
+
+        <span class="com">// Short warning yellow countdown for 3 seconds.</span>
+        <span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">3</span>; i &gt; <span class="num">0</span>; i--) {
+
+            <span class="com">// Show emergency message on car OLED.</span>
+            currentCarText = <span class="str">&quot;EMERG.&quot;</span>;
+
+            <span class="com">// Show countdown.</span>
+            currentCarSec = i;
+
+            <span class="com">// Pedestrians must wait.</span>
+            currentPedText = <span class="str">&quot;WAIT&quot;</span>;
+
+            <span class="com">// No pedestrian countdown here.</span>
+            currentPedSec = <span class="num">0</span>;
+
+            <span class="com">// Update OLED screens.</span>
+            <span class="fn">updateUI</span>();
+
+            <span class="com">// Wait 1 second.</span>
+            <span class="com">// false, false means do not check button or RFID during this emergency transition.</span>
+            <span class="fn">waitAndCheckSensors</span>(<span class="num">1000</span>, <span class="kw">false</span>, <span class="kw">false</span>);
+        }
+
+        <span class="com">// Turn yellow OFF.</span>
+        <span class="fn">digitalWrite</span>(YELLOW_LED, LOW);
+    }
+
+    <span class="com">// If emergency happens while light is yellow.</span>
+    <span class="kw">else</span> <span class="kw">if</span> (currentState == YELLOW) {
+
+        <span class="com">// Turn yellow OFF immediately.</span>
+        <span class="fn">digitalWrite</span>(YELLOW_LED, LOW);
+    }
+
+    <span class="com">// Emergency road becomes green.</span>
+    currentState = GREEN;
+
+    <span class="com">// Turn green LED ON for emergency vehicle.</span>
+    <span class="fn">digitalWrite</span>(GREEN_LED, HIGH);
+
+    <span class="com">// Make sure red LED is OFF.</span>
+    <span class="fn">digitalWrite</span>(RED_LED, LOW);
+
+    <span class="com">// Emergency green countdown for 30 seconds.</span>
+    <span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">30</span>; i &gt; <span class="num">0</span>; i--) {
+
+        <span class="com">// Tell emergency vehicle to go.</span>
+        currentCarText = <span class="str">&quot;EMERG. GO&quot;</span>;
+
+        <span class="com">// Show countdown on car OLED.</span>
+        currentCarSec = i;
+
+        <span class="com">// Pedestrians must stop during emergency.</span>
+        currentPedText = <span class="str">&quot;STOP&quot;</span>;
+
+        <span class="com">// Show countdown on pedestrian OLED.</span>
+        currentPedSec = i;
+
+        <span class="com">// Update OLED screens.</span>
+        <span class="fn">updateUI</span>();
+
+        <span class="com">// Wait 1 second.</span>
+        <span class="com">// No button or RFID checking during emergency green.</span>
+        <span class="fn">waitAndCheckSensors</span>(<span class="num">1000</span>, <span class="kw">false</span>, <span class="kw">false</span>);
+    }
+
+    <span class="com">// Turn green OFF after emergency green finishes.</span>
+    <span class="fn">digitalWrite</span>(GREEN_LED, LOW);
+
+    <span class="com">// Change state to yellow after emergency green.</span>
+    currentState = YELLOW;
+
+    <span class="com">// Turn yellow ON.</span>
+    <span class="fn">digitalWrite</span>(YELLOW_LED, HIGH);
+
+    <span class="com">// Yellow countdown for 3 seconds after emergency.</span>
+    <span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">3</span>; i &gt; <span class="num">0</span>; i--) {
+
+        <span class="com">// Show caution message.</span>
+        currentCarText = <span class="str">&quot;CAUTION&quot;</span>;
+
+        <span class="com">// Show countdown.</span>
+        currentCarSec = i;
+
+        <span class="com">// Pedestrians wait.</span>
+        currentPedText = <span class="str">&quot;WAIT&quot;</span>;
+
+        <span class="com">// No pedestrian countdown.</span>
+        currentPedSec = <span class="num">0</span>;
+
+        <span class="com">// Update OLED screens.</span>
+        <span class="fn">updateUI</span>();
+
+        <span class="com">// Wait 1 second.</span>
+        <span class="fn">waitAndCheckSensors</span>(<span class="num">1000</span>, <span class="kw">false</span>, <span class="kw">false</span>);
+    }
+
+    <span class="com">// Turn yellow OFF.</span>
+    <span class="fn">digitalWrite</span>(YELLOW_LED, LOW);
+}
+
+
+<span class="com">// ==================== SENSOR LOGIC ====================</span>
+
+<span class="kw">bool</span> <span class="fn">waitAndCheckSensors</span>(<span class="kw">unsigned</span> <span class="kw">long</span> duration, <span class="kw">bool</span> checkButton, <span class="kw">bool</span> checkRFID) {
+
+    <span class="com">// Store the time when this waiting period starts.</span>
+    <span class="com">// millis() returns the time since Arduino started in milliseconds.</span>
+    <span class="com">// unsigned long is used because millis() can become a very large number.</span>
+    <span class="kw">unsigned</span> <span class="kw">long</span> startMillis = <span class="fn">millis</span>();
+
+    <span class="com">// Store the last time RFID was checked.</span>
+    <span class="com">// This is used so RFID is not checked too many times every millisecond.</span>
+    <span class="kw">unsigned</span> <span class="kw">long</span> lastRFIDCheck = <span class="num">0</span>;
+
+    <span class="com">// Keep looping until the required duration finishes.</span>
+    <span class="com">// Example:</span>
+    <span class="com">// if duration = 1000, this loop runs for 1 second.</span>
+    <span class="kw">while</span> (<span class="fn">millis</span>() - startMillis &lt; duration) {
+
+        <span class="com">// ---------------- BUZZER TIMER ----------------</span>
+
+        <span class="com">// If the current time is still less than buzzerTurnOffTime,</span>
+        <span class="com">// that means the buzzer should stay ON.</span>
+        <span class="kw">if</span> (<span class="fn">millis</span>() &lt; buzzerTurnOffTime) {
+
+            <span class="com">// Turn buzzer ON.</span>
+            <span class="fn">digitalWrite</span>(BUZZER_PIN, HIGH);
+        }
+
+        <span class="com">// If the current time passed buzzerTurnOffTime,</span>
+        <span class="com">// that means buzzer time finished.</span>
+        <span class="kw">else</span> {
+
+            <span class="com">// Turn buzzer OFF.</span>
+            <span class="fn">digitalWrite</span>(BUZZER_PIN, LOW);
+        }
+
+        <span class="com">// ---------------- IR SENSOR ----------------</span>
+
+        <span class="com">// Read the IR sensor.</span>
+        <span class="com">// HIGH means car detected.</span>
+        <span class="com">// LOW means no car detected.</span>
+        <span class="kw">int</span> irVal = <span class="fn">digitalRead</span>(IR_SENSOR);
+
+        <span class="com">// If the IR sensor detects a car</span>
+        <span class="com">// AND this car was not already counted before.</span>
+        <span class="kw">if</span> (irVal == HIGH &amp;&amp; !isCarPresent) {
+
+            <span class="com">// Mark that a car is now present.</span>
+            isCarPresent = <span class="kw">true</span>;
+
+            <span class="com">// Increase the vehicle count by 1.</span>
+            vehicleCount++;
+
+            <span class="com">// Print text on Serial Monitor.</span>
+            Serial.<span class="fn">print</span>(<span class="str">&quot;Car Count: &quot;</span>);
+
+            <span class="com">// Print the new vehicle count.</span>
+            Serial.<span class="fn">println</span>(vehicleCount);
+
+            <span class="com">// If a car passes while the light is red,</span>
+            <span class="com">// this is a red light violation.</span>
+            <span class="kw">if</span> (currentState == RED) {
+
+                <span class="com">// Print violation message.</span>
+                Serial.<span class="fn">println</span>(<span class="str">&quot;!!! RED LIGHT VIOLATION !!!&quot;</span>);
+
+                <span class="com">// Turn buzzer on for 3 seconds from the current time.</span>
+                <span class="com">// millis() = current time.</span>
+                <span class="com">// +3000 = add 3000 milliseconds = 3 seconds.</span>
+                buzzerTurnOffTime = <span class="fn">millis</span>() + <span class="num">3000</span>;
+            }
+
+            <span class="com">// Update OLED screens because vehicle count changed.</span>
+            <span class="fn">updateUI</span>();
+        }
+
+        <span class="com">// If the IR sensor does not detect a car.</span>
+        <span class="kw">else</span> <span class="kw">if</span> (irVal == LOW) {
+
+            <span class="com">// Allow the next car to be counted.</span>
+            <span class="com">// Without this, the system may count one car many times.</span>
+            isCarPresent = <span class="kw">false</span>;
+        }
+
+        <span class="com">// ---------------- PEDESTRIAN BUTTON ----------------</span>
+
+        <span class="com">// Check the pedestrian button only if checkButton is true.</span>
+        <span class="com">// The button uses INPUT_PULLUP, so pressed = LOW.</span>
+        <span class="kw">if</span> (checkButton &amp;&amp; <span class="fn">digitalRead</span>(BUTTON_PIN) == LOW) {
+
+            <span class="com">// Small delay for button debounce.</span>
+            <span class="com">// Debounce prevents false readings from button vibration.</span>
+            <span class="fn">delay</span>(<span class="num">50</span>);
+
+            <span class="com">// Check again to make sure the button is really pressed.</span>
+            <span class="kw">if</span> (<span class="fn">digitalRead</span>(BUTTON_PIN) == LOW) {
+
+                <span class="com">// Save that pedestrian requested crossing.</span>
+                pedestrianRequest = <span class="kw">true</span>;
+
+                <span class="com">// Return false because this is not an emergency.</span>
+                <span class="kw">return</span> <span class="kw">false</span>;
+            }
+        }
+
+        <span class="com">// ---------------- RFID CHECK ----------------</span>
+
+        <span class="com">// Check RFID only if checkRFID is true.</span>
+        <span class="com">// Also check only every 100 milliseconds to avoid checking too fast.</span>
+        <span class="kw">if</span> (checkRFID &amp;&amp; (<span class="fn">millis</span>() - lastRFIDCheck &gt;= <span class="num">100</span>)) {
+
+            <span class="com">// If emergency RFID card is detected.</span>
+            <span class="kw">if</span> (<span class="fn">checkForEmergency</span>()) {
+
+                <span class="com">// Return true because emergency happened.</span>
+                <span class="kw">return</span> <span class="kw">true</span>;
+            }
+
+            <span class="com">// Save the current time as the last RFID check time.</span>
+            lastRFIDCheck = <span class="fn">millis</span>();
+        }
+
+        <span class="com">// Very small delay to make Arduino stable.</span>
+        <span class="fn">delay</span>(<span class="num">1</span>);
+    }
+
+    <span class="com">// The duration finished and no emergency happened.</span>
+    <span class="kw">return</span> <span class="kw">false</span>;
+}
+
+
+<span class="com">// ---------------- CHECK RFID EMERGENCY ----------------</span>
+
+<span class="kw">bool</span> <span class="fn">checkForEmergency</span>() {
+
+    <span class="com">// Check if there is a new RFID card near the reader</span>
+    <span class="com">// AND if the card serial can be read.</span>
+    <span class="kw">if</span> (rfid.<span class="fn">PICC_IsNewCardPresent</span>() &amp;&amp; rfid.<span class="fn">PICC_ReadCardSerial</span>()) {
+
+        <span class="com">// Stop communication with this RFID card.</span>
+        rfid.<span class="fn">PICC_HaltA</span>();
+
+        <span class="com">// Return true because an emergency card was detected.</span>
+        <span class="kw">return</span> <span class="kw">true</span>;
+    }
+
+    <span class="com">// Return false if no RFID card was detected.</span>
+    <span class="kw">return</span> <span class="kw">false</span>;
+}
+
+
+<span class="com">// ==================== OLED UI UPDATE ====================</span>
+
+<span class="kw">void</span> <span class="fn">updateUI</span>() {
+
+    <span class="com">// Clear the car OLED before writing new data.</span>
+    displayCars.<span class="fn">clear</span>();
+
+    <span class="com">// Make text double size on car OLED.</span>
+    displayCars.<span class="fn">set2X</span>();
+
+    <span class="com">// Print &quot;CAR: &quot; label.</span>
+    displayCars.<span class="fn">print</span>(<span class="str">&quot;CAR: &quot;</span>);
+
+    <span class="com">// Print the current car message:</span>
+    <span class="com">// GO, STOP, CAUTION, EMERG., or EMERG. GO.</span>
+    displayCars.<span class="fn">println</span>(currentCarText);
+
+    <span class="com">// Print empty line.</span>
+    displayCars.<span class="fn">println</span>();
+
+    <span class="com">// Print &quot;TIME: &quot; label.</span>
+    displayCars.<span class="fn">print</span>(<span class="str">&quot;TIME: &quot;</span>);
+
+    <span class="com">// Print the countdown seconds for cars.</span>
+    displayCars.<span class="fn">println</span>(currentCarSec);
+
+    <span class="com">// Return text size to normal.</span>
+    displayCars.<span class="fn">set1X</span>();
+
+    <span class="com">// Print empty line.</span>
+    displayCars.<span class="fn">println</span>();
+
+    <span class="com">// Print vehicle counter label.</span>
+    displayCars.<span class="fn">print</span>(<span class="str">&quot;VEHICLES: &quot;</span>);
+
+    <span class="com">// Print number of counted vehicles.</span>
+    displayCars.<span class="fn">println</span>(vehicleCount);
+
+
+    <span class="com">// Clear pedestrian OLED before writing new data.</span>
+    displayPed.<span class="fn">clear</span>();
+
+    <span class="com">// Set normal text size.</span>
+    displayPed.<span class="fn">set1X</span>();
+
+    <span class="com">// Print title on pedestrian OLED.</span>
+    displayPed.<span class="fn">println</span>(<span class="str">&quot;PEDESTRIAN&quot;</span>);
+
+    <span class="com">// Print empty line.</span>
+    displayPed.<span class="fn">println</span>();
+
+    <span class="com">// Make pedestrian status text bigger.</span>
+    displayPed.<span class="fn">set2X</span>();
+
+    <span class="com">// Print pedestrian message:</span>
+    <span class="com">// WAIT, CROSS, or STOP.</span>
+    displayPed.<span class="fn">println</span>(currentPedText);
+
+    <span class="com">// If pedestrian countdown is greater than 0,</span>
+    <span class="com">// show the countdown number.</span>
+    <span class="kw">if</span> (currentPedSec &gt; <span class="num">0</span>) {
+
+        <span class="com">// Print opening bracket.</span>
+        displayPed.<span class="fn">print</span>(<span class="str">&quot;(&quot;</span>);
+
+        <span class="com">// Print countdown seconds.</span>
+        displayPed.<span class="fn">print</span>(currentPedSec);
+
+        <span class="com">// Print closing bracket.</span>
+        displayPed.<span class="fn">println</span>(<span class="str">&quot;)&quot;</span>);
+    }
+}
+    </code></pre></div>
+
+
+
+<style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    :root{
+      --bg:#07111f;
+      --bg2:#0d1b2f;
+      --card:rgba(255,255,255,.08);
+      --card2:rgba(255,255,255,.12);
+      --text:#eef6ff;
+      --muted:#b8c7d9;
+      --accent:#35d0ff;
+      --accent2:#7cf7c6;
+      --warning:#ffd166;
+      --danger:#ff6b6b;
+      --border:rgba(255,255,255,.15);
+      --shadow:0 20px 60px rgba(0,0,0,.35);
+      --radius:22px;
+    }
+    html{scroll-behavior:smooth;}
+    body{
+      font-family:Segoe UI, Tahoma, Arial, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(53,208,255,.22), transparent 35%),
+        radial-gradient(circle at top right, rgba(124,247,198,.14), transparent 30%),
+        linear-gradient(135deg,var(--bg),var(--bg2));
+      color:var(--text);
+      line-height:1.7;
+      min-height:100vh;
+    }
+    header{
+      padding:44px 18px 24px;
+      text-align:center;
+      position:relative;
+      overflow:hidden;
+    }
+    .badge{
+      display:inline-block;
+      padding:8px 14px;
+      border:1px solid var(--border);
+      border-radius:999px;
+      color:var(--accent2);
+      background:rgba(255,255,255,.06);
+      font-size:.9rem;
+      margin-bottom:16px;
+    }
+    h1{
+      font-size:clamp(2rem,5vw,4.4rem);
+      line-height:1.05;
+      margin-bottom:16px;
+      letter-spacing:-1px;
+    }
+    .hero-text{
+      max-width:850px;
+      margin:0 auto;
+      color:var(--muted);
+      font-size:1.05rem;
+    }
+    nav{
+      max-width:1180px;
+      margin:22px auto 0;
+      padding:12px;
+      display:flex;
+      gap:10px;
+      justify-content:center;
+      flex-wrap:wrap;
+    }
+    nav a{
+      color:var(--text);
+      text-decoration:none;
+      background:rgba(255,255,255,.08);
+      border:1px solid var(--border);
+      padding:9px 13px;
+      border-radius:999px;
+      font-size:.9rem;
+      transition:.25s;
+    }
+    nav a:hover{background:rgba(53,208,255,.22);transform:translateY(-2px);}
+    main{max-width:1180px;margin:0 auto;padding:22px 18px 60px;}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:18px;}
+    .card{
+      grid-column:span 12;
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:24px;
+      backdrop-filter:blur(14px);
+      margin-bottom:18px;
+    }
+    .half{grid-column:span 6;}
+    .third{grid-column:span 4;}
+    .tag{
+      display:inline-block;
+      color:#06111f;
+      background:linear-gradient(90deg,var(--accent),var(--accent2));
+      padding:6px 12px;
+      border-radius:999px;
+      font-weight:700;
+      font-size:.82rem;
+      margin-bottom:12px;
+    }
+    h2{font-size:1.65rem;margin-bottom:12px;}
+    h3{font-size:1.15rem;margin:18px 0 8px;color:var(--accent2);}
+    p{color:var(--muted);margin-bottom:10px;}
+    strong{color:var(--text);}
+    table{width:100%;border-collapse:collapse;margin-top:14px;overflow:hidden;border-radius:16px;}
+    th,td{padding:13px 12px;border-bottom:1px solid rgba(255,255,255,.11);text-align:left;vertical-align:top;}
+    th{background:rgba(53,208,255,.18);color:var(--text);font-size:.93rem;}
+    tr:hover td{background:rgba(255,255,255,.04);}
+    code,.code{
+      background:rgba(0,0,0,.35);
+      border:1px solid rgba(255,255,255,.13);
+      color:#dff8ff;
+      padding:2px 6px;
+      border-radius:8px;
+      font-family:Consolas, monospace;
+    }
+    pre{
+      overflow:auto;
+      background:rgba(0,0,0,.38);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:18px;
+      padding:16px;
+      margin-top:12px;
+      color:#dff8ff;
+    }
+    .note,.warning,.danger{
+      border-radius:18px;
+      padding:15px 16px;
+      margin:14px 0;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.07);
+    }
+    .note{border-left:5px solid var(--accent);}
+    .warning{border-left:5px solid var(--warning);}
+    .danger{border-left:5px solid var(--danger);}
+    .mini-list{display:grid;gap:10px;margin-top:12px;}
+    .mini-list div{background:var(--card2);border:1px solid var(--border);border-radius:16px;padding:13px;}
+    .pin-map{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:14px;}
+    .pin{background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:16px;padding:14px;}
+    .pin span{display:block;color:var(--accent);font-weight:800;margin-bottom:4px;}
+    footer{text-align:center;color:var(--muted);padding:26px 14px;border-top:1px solid var(--border);}
+    @media(max-width:800px){.half,.third{grid-column:span 12}.card{padding:18px}.pin-map{grid-template-columns:1fr}table{font-size:.86rem}th,td{padding:10px 8px}nav{justify-content:flex-start;overflow:auto;flex-wrap:nowrap}.hero-text{text-align:left}}
+  </style>
+</head>
+<body>
+  <header>
+    <span class="badge">Arduino UNO Discussion Guide</span>
+    <h1>Smart Traffic Light System<br>Pin Explanation</h1>
+    <p class="hero-text">
+      This page explains every important pin in your Arduino traffic light project, including digital pins,
+      analog pins, PWM pins, OLED I2C pins, RFID SPI pins, IR sensor, push button, buzzer, LEDs,
+      microcontroller meaning, and all important abbreviations.
+    </p>
+    <nav>
+      <a href="#overview">Overview</a>
+      <a href="#arduino">Arduino</a>
+      <a href="#pinmap">Pin Map</a>
+      <a href="#digital">Digital</a>
+      <a href="#analog">Analog</a>
+      <a href="#pwm">PWM</a>
+      <a href="#components">Components</a>
+      <a href="#abbr">Abbreviations</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="card" id="overview">
+      <span class="tag">Project Overview</span>
+      <h2>What does this project do?</h2>
+      <p>
+        This project is a <strong>Smart Traffic Light System</strong> using an Arduino UNO. The Arduino controls
+        the red, yellow, and green LEDs, reads an IR sensor to detect cars, counts vehicles, reads a push button
+        for pedestrian crossing, uses a buzzer for red-light violations, shows information on OLED displays,
+        and uses RFID to give emergency vehicles priority.
+      </p>
+      <div class="note">
+        <p><strong>Simple idea:</strong> Sensors give information to the Arduino. The Arduino thinks using the code. Then it controls LEDs, buzzer, OLED, and emergency mode.</p>
+      </div>
+    </section>
+
+    <section class="card" id="arduino">
+      <span class="tag">Arduino UNO</span>
+      <h2>What is Arduino UNO?</h2>
+      <p>
+        Arduino UNO is a small electronic board. It works like the <strong>brain</strong> of the project. It has a
+        microcontroller called <strong>ATmega328P</strong>. The microcontroller stores and runs your code.
+      </p>
+      <div class="grid">
+        <div class="card third">
+          <h3>Input</h3>
+          <p>Arduino reads signals from sensors or buttons. Example: IR sensor detects a car, button detects pedestrian request.</p>
+        </div>
+        <div class="card third">
+          <h3>Processing</h3>
+          <p>Arduino makes decisions using code. Example: if red light is ON and car passes, turn buzzer ON.</p>
+        </div>
+        <div class="card third">
+          <h3>Output</h3>
+          <p>Arduino controls devices. Example: LEDs, buzzer, OLED display, RFID communication.</p>
+        </div>
+      </div>
+      <h3>What is a microcontroller?</h3>
+      <p>
+        A <strong>microcontroller</strong> is a tiny computer inside the Arduino. It has a CPU, memory, and input/output control.
+        It is not like a laptop, but it is perfect for controlling electronic circuits.
+      </p>
+    </section>
+
+    <section class="card" id="pinmap">
+      <span class="tag">Your Wiring</span>
+      <h2>Full Arduino Pin Map for Your Project</h2>
+      <table>
+        <tr><th>Arduino Pin</th><th>Component</th><th>Pin Type</th><th>What it does</th></tr>
+        <tr><td>Pin 2</td><td>Push Button</td><td>Digital Input</td><td>Reads pedestrian request. LOW when not pressed, HIGH when pressed if using pull-down.</td></tr>
+        <tr><td>Pin 3</td><td>Red LED</td><td>Digital Output / PWM capable</td><td>Turns the red light ON/OFF. Red means cars must stop.</td></tr>
+        <tr><td>Pin 4</td><td>Yellow LED</td><td>Digital Output</td><td>Turns the yellow warning light ON/OFF before the signal changes.</td></tr>
+        <tr><td>Pin 5</td><td>IR Sensor OUT</td><td>Digital Input</td><td>Reads if a car passes in front of the sensor.</td></tr>
+        <tr><td>Pin 6</td><td>Green LED</td><td>Digital Output / PWM capable</td><td>Turns the green light ON/OFF. Green means cars can move.</td></tr>
+        <tr><td>Pin 7</td><td>Buzzer</td><td>Digital Output</td><td>Turns ON when a car violates the red light.</td></tr>
+        <tr><td>Pin 9</td><td>RFID RST</td><td>Digital Output</td><td>Resets or restarts the RFID module when needed.</td></tr>
+        <tr><td>Pin 10</td><td>RFID SDA / SS</td><td>SPI Select Pin</td><td>Selects the RFID module so Arduino can communicate with it.</td></tr>
+        <tr><td>Pin 11</td><td>RFID MOSI</td><td>SPI Data</td><td>Arduino sends data to RFID.</td></tr>
+        <tr><td>Pin 12</td><td>RFID MISO</td><td>SPI Data</td><td>RFID sends data back to Arduino.</td></tr>
+        <tr><td>Pin 13</td><td>RFID SCK</td><td>SPI Clock</td><td>Clock signal that synchronizes RFID communication.</td></tr>
+        <tr><td>A4</td><td>OLED SDA</td><td>I2C Data</td><td>Data line used to send display information to OLED.</td></tr>
+        <tr><td>A5</td><td>OLED SCL</td><td>I2C Clock</td><td>Clock line used to control I2C timing.</td></tr>
+        <tr><td>5V</td><td>OLED / IR / Button</td><td>Power</td><td>Provides 5 volts to components that safely use 5V.</td></tr>
+        <tr><td>3.3V</td><td>RFID RC522</td><td>Power</td><td>Powers the RFID module safely. Do not connect RC522 to 5V.</td></tr>
+        <tr><td>GND</td><td>All components</td><td>Ground</td><td>Completes the circuit and gives all components the same reference voltage.</td></tr>
+      </table>
+    </section>
+
+    <section class="card" id="digital">
+      <span class="tag">Digital Pins</span>
+      <h2>Digital Pins Explained</h2>
+      <p>
+        Digital pins are pins that understand only two states: <strong>HIGH</strong> and <strong>LOW</strong>.
+        HIGH means 5V, and LOW means 0V.
+      </p>
+      <table>
+        <tr><th>State</th><th>Voltage</th><th>Meaning</th><th>Example</th></tr>
+        <tr><td>HIGH</td><td>5V</td><td>ON / TRUE / 1</td><td>LED turns ON</td></tr>
+        <tr><td>LOW</td><td>0V</td><td>OFF / FALSE / 0</td><td>LED turns OFF</td></tr>
+      </table>
+      <h3>Digital Output</h3>
+      <p>Used when Arduino controls something, like an LED or buzzer.</p>
+      <pre><code>digitalWrite(RED_LED, HIGH); // Red LED ON
+digitalWrite(RED_LED, LOW);  // Red LED OFF</code></pre>
+      <h3>Digital Input</h3>
+      <p>Used when Arduino reads something, like a button or IR sensor.</p>
+      <pre><code>int buttonState = digitalRead(BUTTON_PIN);</code></pre>
+    </section>
+
+    <section class="card" id="analog">
+      <span class="tag">Analog Pins</span>
+      <h2>Analog Pins Explained</h2>
+      <p>
+        Analog pins are A0, A1, A2, A3, A4, and A5. They can read a range of voltage values, not only ON/OFF.
+        Arduino converts the voltage into a number from <strong>0 to 1023</strong> using an ADC.
+      </p>
+      <table>
+        <tr><th>Analog Reading</th><th>Approx Voltage</th><th>Meaning</th></tr>
+        <tr><td>0</td><td>0V</td><td>No voltage</td></tr>
+        <tr><td>512</td><td>About 2.5V</td><td>Middle value</td></tr>
+        <tr><td>1023</td><td>About 5V</td><td>Maximum voltage</td></tr>
+      </table>
+      <div class="note">
+        <p><strong>Important:</strong> In your project, A4 and A5 are not used as normal analog inputs. They are used for OLED I2C communication.</p>
+      </div>
+      <pre><code>int sensorValue = analogRead(A0); // Reads value from 0 to 1023</code></pre>
+    </section>
+
+    <section class="card" id="pwm">
+      <span class="tag">PWM</span>
+      <h2>PWM Pins Explained</h2>
+      <p>
+        PWM means <strong>Pulse Width Modulation</strong>. It is used to make a digital pin act like analog output.
+        Arduino does this by switching the pin ON and OFF very fast.
+      </p>
+      <div class="mini-list">
+        <div><strong>More ON time:</strong> LED becomes brighter or motor becomes faster.</div>
+        <div><strong>Less ON time:</strong> LED becomes dimmer or motor becomes slower.</div>
+        <div><strong>PWM value range:</strong> 0 to 255.</div>
+      </div>
+      <table>
+        <tr><th>PWM Value</th><th>Effect</th></tr>
+        <tr><td>0</td><td>Always OFF</td></tr>
+        <tr><td>127</td><td>About half power</td></tr>
+        <tr><td>255</td><td>Always ON</td></tr>
+      </table>
+      <p>On Arduino UNO, PWM pins are marked with <strong>~</strong>: 3, 5, 6, 9, 10, and 11.</p>
+      <pre><code>analogWrite(RED_LED, 120); // Red LED medium brightness</code></pre>
+      <div class="warning">
+        <p><strong>Important:</strong> PWM is output only. It is not the same as analog input.</p>
+      </div>
+    </section>
+
+    <section class="card" id="components">
+      <span class="tag">Components</span>
+      <h2>Every Component and Its Pins</h2>
+
+      <h3>1. Red, Yellow, Green LEDs</h3>
+      <p>LED means <strong>Light Emitting Diode</strong>. It produces light when current passes through it.</p>
+      <table>
+        <tr><th>LED Part</th><th>Connection</th><th>Function</th></tr>
+        <tr><td>Long leg / Anode</td><td>Arduino pin through resistor</td><td>Receives signal from Arduino</td></tr>
+        <tr><td>Short leg / Cathode</td><td>GND</td><td>Completes circuit</td></tr>
+        <tr><td>Resistor</td><td>In series with LED</td><td>Protects LED from too much current</td></tr>
+      </table>
+
+      <h3>2. IR Sensor</h3>
+      <p>IR means <strong>Infrared</strong>. It detects objects using infrared light.</p>
+      <table>
+        <tr><th>IR Pin</th><th>Arduino Connection</th><th>Function</th></tr>
+        <tr><td>VCC</td><td>5V</td><td>Powers the IR sensor</td></tr>
+        <tr><td>GND</td><td>GND</td><td>Ground connection</td></tr>
+        <tr><td>OUT</td><td>Pin 5</td><td>Sends HIGH/LOW to Arduino when car is detected</td></tr>
+      </table>
+
+      <h3>3. Push Button with Pull-Down Resistor</h3>
+      <p>The button is used by pedestrians to request crossing.</p>
+      <table>
+        <tr><th>Connection</th><th>Explanation</th></tr>
+        <tr><td>One side of button to 5V</td><td>Gives HIGH signal when pressed</td></tr>
+        <tr><td>Other side of button to Pin 2</td><td>Arduino reads the button state</td></tr>
+        <tr><td>10k resistor from Pin 2 to GND</td><td>Keeps the pin LOW when button is not pressed</td></tr>
+      </table>
+      <div class="note"><p><strong>Pull-down result:</strong> Not pressed = LOW. Pressed = HIGH.</p></div>
+
+      <h3>4. Buzzer</h3>
+      <p>The buzzer gives sound when a violation happens.</p>
+      <table>
+        <tr><th>Buzzer Pin</th><th>Arduino Connection</th><th>Function</th></tr>
+        <tr><td>Positive +</td><td>Pin 7</td><td>Receives ON/OFF signal</td></tr>
+        <tr><td>Negative -</td><td>GND</td><td>Completes circuit</td></tr>
+      </table>
+
+      <h3>5. OLED Display</h3>
+      <p>OLED means <strong>Organic Light Emitting Diode</strong>. It shows words like GO, STOP, WAIT, CROSS, timer, and car count.</p>
+      <table>
+        <tr><th>OLED Pin</th><th>Arduino Connection</th><th>Function</th></tr>
+        <tr><td>VCC</td><td>5V</td><td>Powers the OLED display</td></tr>
+        <tr><td>GND</td><td>GND</td><td>Ground connection</td></tr>
+        <tr><td>SDA</td><td>A4</td><td>Serial data line</td></tr>
+        <tr><td>SCL</td><td>A5</td><td>Serial clock line</td></tr>
+      </table>
+
+      <h3>6. RFID RC522</h3>
+      <p>RFID means <strong>Radio Frequency Identification</strong>. It reads a card/tag for emergency vehicle priority.</p>
+      <table>
+        <tr><th>RFID Pin</th><th>Arduino Connection</th><th>Function</th></tr>
+        <tr><td>3.3V</td><td>3.3V</td><td>Powers RFID safely</td></tr>
+        <tr><td>GND</td><td>GND</td><td>Ground connection</td></tr>
+        <tr><td>SDA / SS</td><td>Pin 10</td><td>Selects RFID module</td></tr>
+        <tr><td>SCK</td><td>Pin 13</td><td>Clock for SPI</td></tr>
+        <tr><td>MOSI</td><td>Pin 11</td><td>Arduino sends data to RFID</td></tr>
+        <tr><td>MISO</td><td>Pin 12</td><td>RFID sends data to Arduino</td></tr>
+        <tr><td>RST</td><td>Pin 9</td><td>Reset pin</td></tr>
+      </table>
+      <div class="danger"><p><strong>Very important:</strong> RC522 RFID uses 3.3V. Do not connect it to 5V because it may be damaged.</p></div>
+    </section>
+
+    <section class="card">
+      <span class="tag">Digital Components</span>
+      <h2>What is a digital component?</h2>
+      <p>
+        A digital component is a component that deals with ON/OFF signals. It does not need many values.
+        It only works with HIGH and LOW.
+      </p>
+      <table>
+        <tr><th>Digital Input Components</th><th>Digital Output Components</th></tr>
+        <tr><td>Push button</td><td>LED</td></tr>
+        <tr><td>IR sensor OUT pin</td><td>Buzzer</td></tr>
+        <tr><td>RFID signal pins</td><td>OLED control through communication</td></tr>
+      </table>
+      <div class="note">
+        <p><strong>Input means:</strong> component sends information to Arduino. <strong>Output means:</strong> Arduino sends control signal to the component.</p>
+      </div>
+    </section>
+
+    <section class="card" id="abbr">
+      <span class="tag">Abbreviations</span>
+      <h2>All Important Short Words and Their Full Meaning</h2>
+      <table>
+        <tr><th>Short Word</th><th>Full Word</th><th>Easy Meaning</th></tr>
+        <tr><td>UNO</td><td>One</td><td>Arduino board name</td></tr>
+        <tr><td>MCU</td><td>Microcontroller Unit</td><td>The small computer/chip inside Arduino</td></tr>
+        <tr><td>CPU</td><td>Central Processing Unit</td><td>The part that executes instructions</td></tr>
+        <tr><td>I/O</td><td>Input / Output</td><td>Pins that read or control devices</td></tr>
+        <tr><td>VCC</td><td>Voltage Common Collector</td><td>Power pin for a component</td></tr>
+        <tr><td>GND</td><td>Ground</td><td>0V reference and return path</td></tr>
+        <tr><td>LED</td><td>Light Emitting Diode</td><td>Small light component</td></tr>
+        <tr><td>IR</td><td>Infrared</td><td>Invisible light used for detection</td></tr>
+        <tr><td>OLED</td><td>Organic Light Emitting Diode</td><td>Small display screen</td></tr>
+        <tr><td>RFID</td><td>Radio Frequency Identification</td><td>Reads cards/tags wirelessly</td></tr>
+        <tr><td>PWM</td><td>Pulse Width Modulation</td><td>Controls brightness or speed using fast ON/OFF</td></tr>
+        <tr><td>ADC</td><td>Analog to Digital Converter</td><td>Converts analog voltage to a number</td></tr>
+        <tr><td>I2C</td><td>Inter-Integrated Circuit</td><td>Communication using SDA and SCL</td></tr>
+        <tr><td>SDA</td><td>Serial Data</td><td>Data wire in I2C, also SS name on RFID boards</td></tr>
+        <tr><td>SCL</td><td>Serial Clock</td><td>Clock wire in I2C</td></tr>
+        <tr><td>SPI</td><td>Serial Peripheral Interface</td><td>Fast communication protocol used by RFID</td></tr>
+        <tr><td>SS</td><td>Slave Select</td><td>Selects which SPI device is active</td></tr>
+        <tr><td>MOSI</td><td>Master Out Slave In</td><td>Arduino sends data to RFID</td></tr>
+        <tr><td>MISO</td><td>Master In Slave Out</td><td>RFID sends data to Arduino</td></tr>
+        <tr><td>SCK</td><td>Serial Clock</td><td>Clock signal for SPI</td></tr>
+        <tr><td>RST</td><td>Reset</td><td>Restarts the RFID module</td></tr>
+      </table>
+    </section>
+
+    <section class="card">
+      <span class="tag">Discussion Answer</span>
+      <h2>Easy Explanation to Say in Your Discussion</h2>
+      <p>
+        The Arduino UNO is the controller of my project. It uses a microcontroller called ATmega328P to run the code.
+        Some pins are inputs, like the push button on pin 2 and the IR sensor on pin 5. These pins send information to the Arduino.
+        Other pins are outputs, like the LEDs and buzzer. The Arduino sends HIGH or LOW to turn them ON or OFF.
+      </p>
+      <p>
+        The OLED display uses I2C communication through A4 and A5. A4 is SDA, which sends data, and A5 is SCL, which sends the clock.
+        The RFID module uses SPI communication through pins 10, 11, 12, and 13, plus pin 9 for reset. The RFID works with 3.3V,
+        so it should not be connected to 5V.
+      </p>
+      <p>
+        Digital pins work with HIGH and LOW only. Analog pins read values from 0 to 1023. PWM pins can control brightness or speed
+        by switching ON and OFF very fast. In this project, Arduino combines digital input, digital output, I2C, SPI, and real-time logic.
+      </p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Smart Traffic Light System | Arduino Project Explanation Website</p>
+  </footer>
+</body>
+</html>
